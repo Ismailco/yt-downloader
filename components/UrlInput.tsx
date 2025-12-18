@@ -1,23 +1,17 @@
-'use client';
+"use client";
 
-import { useState, ChangeEvent } from 'react';
+import { useState, ChangeEvent } from "react";
+import { UrlInputProps, AnalyzeResult } from "@/types";
 
-const API_KEY = process.env.NEXT_PUBLIC_API_KEY || '';
-
-interface UrlInputProps {
-  type?: string;
-  onAnalyzeComplete?: (result: { url: string; data: any }) => void;
-  onUrlChange?: (url: string) => void;
-  className?: string;
-}
+const API_KEY = process.env.NEXT_PUBLIC_API_KEY || "";
 
 export default function UrlInput({
   type,
   onAnalyzeComplete,
   onUrlChange,
-  className = ''
+  className = "",
 }: UrlInputProps) {
-  const [url, setUrl] = useState('');
+  const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -30,7 +24,7 @@ export default function UrlInput({
 
   const handleAnalyze = async () => {
     if (!url || !/^https?:\/\//i.test(url)) {
-      setError('Please enter a valid URL (https://...)');
+      setError("Please enter a valid URL (https://...)");
       return;
     }
 
@@ -38,24 +32,24 @@ export default function UrlInput({
     setError(null);
 
     try {
-      const response = await fetch('/api/analyze', {
-        method: 'POST',
+      const response = await fetch("/api/analyze", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': API_KEY
+          "Content-Type": "application/json",
+          "x-api-key": API_KEY,
         },
-        body: JSON.stringify({ url, type })
+        body: JSON.stringify({ url, type }),
       });
 
       if (!response.ok) {
         const payload = await response.json().catch(() => ({}));
-        throw new Error(payload.error || 'Unable to analyze URL');
+        throw new Error(payload.error || "Unable to analyze URL");
       }
 
-      const data = await response.json();
+      const data: AnalyzeResult = await response.json();
       onAnalyzeComplete?.({ url, data });
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An error occurred");
     } finally {
       setLoading(false);
     }
@@ -80,7 +74,7 @@ export default function UrlInput({
           disabled={loading}
           className="rounded-md bg-cyan-500 px-4 py-2 font-semibold text-slate-900 shadow disabled:opacity-60"
         >
-          {loading ? 'Analyzing...' : 'Analyze'}
+          {loading ? "Analyzing..." : "Analyze"}
         </button>
       </div>
       {error && <p className="text-sm text-red-400">{error}</p>}

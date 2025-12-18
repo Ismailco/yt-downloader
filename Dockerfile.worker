@@ -10,11 +10,6 @@ FROM base AS deps
 COPY package.json pnpm-lock.yaml* ./
 RUN pnpm install --frozen-lockfile
 
-FROM base AS builder
-COPY --from=deps /app/node_modules ./node_modules
-COPY . .
-RUN pnpm exec tsc --outDir dist --skipLibCheck
-
 FROM node:20-bullseye
 ENV NODE_ENV=production
 ENV PNPM_HOME="/root/.local/share/pnpm"
@@ -26,7 +21,6 @@ RUN corepack enable \
 WORKDIR /app
 
 COPY --from=deps /app/node_modules ./node_modules
-COPY --from=builder /app/dist ./dist
-COPY package.json ./
+COPY . .
 
-CMD ["node", "dist/workers/downloadWorker.js"]
+CMD ["node", "workers/start.js"]

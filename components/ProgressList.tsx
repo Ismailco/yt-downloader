@@ -1,14 +1,9 @@
-'use client';
+"use client";
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Job, ProgressListProps } from "@/types";
 
-const API_BASE = '/api/jobs';
-
-interface Job {
-  id?: string;
-  jobId?: string;
-  type?: string;
-}
+const API_BASE = "/api/jobs";
 
 interface JobState {
   status?: string;
@@ -20,18 +15,17 @@ interface JobState {
   error?: string;
 }
 
-interface ProgressListProps {
-  jobs?: Job[];
-  apiKey?: string;
-}
-
-function mergeJobState(prev: Record<string, JobState>, jobId: string, patch: Partial<JobState>): Record<string, JobState> {
+function mergeJobState(
+  prev: Record<string, JobState>,
+  jobId: string,
+  patch: Partial<JobState>,
+): Record<string, JobState> {
   return {
     ...prev,
     [jobId]: {
       ...(prev[jobId] || {}),
-      ...patch
-    }
+      ...patch,
+    },
   };
 }
 
@@ -40,8 +34,8 @@ export default function ProgressList({ jobs = [], apiKey }: ProgressListProps) {
   const sourcesRef = useRef<Record<string, EventSource>>({});
 
   const trackedJobIds = useMemo(
-    () => jobs.map((job) => String(job.id || job.jobId || job)),
-    [jobs]
+    () => jobs.map((job) => String(job.id || "")),
+    [jobs],
   );
 
   useEffect(() => {
@@ -51,7 +45,7 @@ export default function ProgressList({ jobs = [], apiKey }: ProgressListProps) {
       }
 
       const url = `${API_BASE}/${jobId}/events${
-        apiKey ? `?apiKey=${encodeURIComponent(apiKey)}` : ''
+        apiKey ? `?apiKey=${encodeURIComponent(apiKey)}` : ""
       }`;
       const source = new EventSource(url);
       sourcesRef.current[jobId] = source;
@@ -59,55 +53,55 @@ export default function ProgressList({ jobs = [], apiKey }: ProgressListProps) {
       source.onmessage = (event) => {
         try {
           const payload = JSON.parse(event.data);
-          if (payload.type === 'progress') {
+          if (payload.type === "progress") {
             setJobStates((prev) =>
               mergeJobState(prev, jobId, {
-                status: 'active',
+                status: "active",
                 percent: payload.percent ?? 0,
                 message: payload.message,
-                videoIndex: payload.videoIndex ?? null
-              })
+                videoIndex: payload.videoIndex ?? null,
+              }),
             );
-          } else if (payload.type === 'complete') {
+          } else if (payload.type === "complete") {
             setJobStates((prev) =>
               mergeJobState(prev, jobId, {
-                status: 'completed',
+                status: "completed",
                 percent: 100,
                 downloadUrl: payload.url || payload.folderPath,
                 files: payload.files || null,
-                message: 'Download ready'
-              })
+                message: "Download ready",
+              }),
             );
             source.close();
             delete sourcesRef.current[jobId];
-          } else if (payload.type === 'error') {
+          } else if (payload.type === "error") {
             setJobStates((prev) =>
               mergeJobState(prev, jobId, {
-                status: 'failed',
+                status: "failed",
                 percent: 0,
-                error: payload.message
-              })
+                error: payload.message,
+              }),
             );
             source.close();
             delete sourcesRef.current[jobId];
           }
         } catch (err) {
-          console.error('Failed to parse job event', err);
+          console.error("Failed to parse job event", err);
         }
       };
 
       source.onerror = () => {
         setJobStates((prev) =>
           mergeJobState(prev, jobId, {
-            status: 'reconnecting',
-            message: 'Connection lost. Retrying...'
-          })
+            status: "reconnecting",
+            message: "Connection lost. Retrying...",
+          }),
         );
         source.close();
         delete sourcesRef.current[jobId];
         setTimeout(() => {
           setJobStates((prev) =>
-            mergeJobState(prev, jobId, { status: 'reconnecting' })
+            mergeJobState(prev, jobId, { status: "reconnecting" }),
           );
         }, 3000);
       };
@@ -136,39 +130,37 @@ export default function ProgressList({ jobs = [], apiKey }: ProgressListProps) {
         const percent = Math.min(100, Math.max(0, state.percent ?? 0));
         return (
           <div
-          key={jobId}
-          className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 shadow"
+            key={jobId}
+            className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 shadow"
           >
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
-                <p className="text-sm font-semibold text-white">
-                  Job #{jobId}
-                </p>
+                <p className="text-sm font-semibold text-white">Job #{jobId}</p>
                 <p className="text-xs text-slate-400">
-                  {state.message || state.status || 'Queued'}
+                  {state.message || state.status || "Queued"}
                 </p>
               </div>
               <span
                 className={`text-xs font-semibold uppercase tracking-wide ${
-                  state.status === 'completed'
-                    ? 'text-emerald-400'
-                    : state.status === 'failed'
-                    ? 'text-red-400'
-                    : 'text-cyan-300'
+                  state.status === "completed"
+                    ? "text-emerald-400"
+                    : state.status === "failed"
+                      ? "text-red-400"
+                      : "text-cyan-300"
                 }`}
               >
-                {state.status || 'queued'}
+                {state.status || "queued"}
               </span>
             </div>
             <div className="mt-3 h-2 rounded-full bg-slate-800">
               <div
-                className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-blue-500 transition-all"
+                className="h-full rounded-full bg-linear-to-r from-cyan-400 to-blue-500 transition-all"
                 style={{ width: `${percent}%` }}
               />
             </div>
             <div className="mt-3 flex flex-wrap items-center justify-between text-xs text-slate-400">
               <span>{percent.toFixed(0)}%</span>
-              {typeof state.videoIndex === 'number' && (
+              {typeof state.videoIndex === "number" && (
                 <span>Video #{state.videoIndex + 1}</span>
               )}
               {state.downloadUrl && (
