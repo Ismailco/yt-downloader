@@ -2,7 +2,7 @@ import path from 'path';
 import fs from 'fs-extra';
 import { Worker, Job } from 'bullmq';
 import {
-  connection,
+  getConnection,
   failedDownloadQueue,
   createPubSubClient
 } from '../utils/queue';
@@ -157,7 +157,7 @@ async function processJob(job: Job) {
 
 function startWorker() {
   const worker = new Worker('download', processJob, {
-    connection,
+    connection: getConnection(),
     concurrency: CONCURRENCY
   });
 

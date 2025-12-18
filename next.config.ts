@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  serverExternalPackages: ['ytpl', 'youtube-dl-exec', 'fluent-ffmpeg'],
 };
 
 export default nextConfig;

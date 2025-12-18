@@ -41,8 +41,8 @@ async function convertToMp3(inputPath: string): Promise<string> {
       .audioCodec('libmp3lame')
       .audioBitrate(192)
       .format('mp3')
-      .on('end', resolve)
-      .on('error', reject)
+      .on('end', () => resolve())
+      .on('error', (err: Error) => reject(err))
       .save(outputPath);
   });
 
