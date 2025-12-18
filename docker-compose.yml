@@ -1,0 +1,60 @@
+version: '3.9'
+
+services:
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "6379:6379"
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ytdown-web
+    depends_on:
+      - redis
+    environment:
+      NODE_ENV: production
+      REDIS_URL: redis://redis:6379/0
+      API_KEY: ${API_KEY:-changeme}
+      DOWNLOAD_TOKEN_SECRET: ${DOWNLOAD_TOKEN_SECRET:-changeme}
+      OUTPUT_BASE: /data
+    volumes:
+      - storage:/data/storage
+      - tmp:/data/tmp
+    expose:
+      - "3000"
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    image: ytdown-worker
+    depends_on:
+      - redis
+    environment:
+      NODE_ENV: production
+      REDIS_URL: redis://redis:6379/0
+      API_KEY: ${API_KEY:-changeme}
+      DOWNLOAD_TOKEN_SECRET: ${DOWNLOAD_TOKEN_SECRET:-changeme}
+      OUTPUT_BASE: /data
+      CONCURRENCY: ${CONCURRENCY:-2}
+    volumes:
+      - storage:/data/storage
+      - tmp:/data/tmp
+
+  nginx:
+    image: nginx:1.27-alpine
+    depends_on:
+      - web
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./deploy/certs:/etc/nginx/certs:ro
+
+volumes:
+  storage:
+  tmp:
