@@ -1,12 +1,27 @@
-const { EventEmitter } = require('events');
+/**
+ * Unit tests for downloader library.
+ *
+ * The downloader implementation executes `yt-dlp` via `node:child_process.execFile`
+ * and optionally converts to mp3 via `fluent-ffmpeg`.
+ *
+ * These tests:
+ * - Mock `execFile` to simulate yt-dlp progress + destination output
+ * - Keep `fluent-ffmpeg` chain behavior so mp3 conversion logic is exercised
+ * - Mock `fs-extra` + `ytpl` as needed
+ */
 
-jest.mock('youtube-dl-exec', () => {
-  const fn = jest.fn();
-  fn.exec = jest.fn();
-  return fn;
-});
+const { EventEmitter } = require("events");
 
-jest.mock('fluent-ffmpeg', () => {
+// ---- Mocks: child_process (yt-dlp) ----
+const execFileMock = jest.fn();
+
+jest.mock("node:child_process", () => ({
+  __esModule: true,
+  execFile: (...args) => execFileMock(...args),
+}));
+
+// ---- Mocks: ffmpeg chain (mp3 conversion) ----
+jest.mock("fluent-ffmpeg", () => {
   return jest.fn(() => {
     const chain = {
       noVideo: jest.fn(() => chain),
@@ -14,8 +29,8 @@ jest.mock('fluent-ffmpeg', () => {
       audioBitrate: jest.fn(() => chain),
       format: jest.fn(() => chain),
       on: jest.fn((event, handler) => {
-        if (event === 'end') chain._onEnd = handler;
-        if (event === 'error') chain._onError = handler;
+        if (event === "end") chain._onEnd = handler;
+        if (event === "error") chain._onError = handler;
         return chain;
       }),
       save: jest.fn(() => {
@@ -23,95 +38,149 @@ jest.mock('fluent-ffmpeg', () => {
           if (chain._onEnd) chain._onEnd();
         });
         return chain;
-      })
+      }),
     };
     return chain;
   });
 });
 
-jest.mock('fs-extra', () => ({
-  ensureDir: jest.fn(() => Promise.resolve()),
+// ---- Mocks: fs-extra ----
+const ensureDir = jest.fn(() => Promise.resolve());
+const remove = jest.fn(() => Promise.resolve());
+const move = jest.fn(() => Promise.resolve());
+
+jest.mock("fs-extra", () => ({
+  ensureDir: (...args) => ensureDir(...args),
   ensureDirSync: jest.fn(),
-  remove: jest.fn(() => Promise.resolve()),
-  move: jest.fn(() => Promise.resolve())
+  remove: (...args) => remove(...args),
+  move: (...args) => move(...args),
 }));
 
-jest.mock('ytpl', () => ({
+// ---- Mocks: ytpl ----
+const ytplMock = jest.fn();
+jest.mock("ytpl", () => ({
   __esModule: true,
-  default: jest.fn()
+  default: (...args) => ytplMock(...args),
 }));
 
-const youtubedl = require('youtube-dl-exec');
-const ffmpeg = require('fluent-ffmpeg');
-const ytpl = require('ytpl').default;
+// Import after mocks are in place
+const { downloadVideo, downloadPlaylist } = require("../../lib/downloader");
 
-const { downloadVideo, downloadPlaylist } = require('../../lib/downloader');
+/**
+ * Create a fake ChildProcess returned by execFile.
+ * The downloader:
+ * - listens to stdout/stderr 'data' events for progress/path
+ * - awaits process end via 'exit' (and listens for 'error')
+ */
+function createExecFileProcess({
+  stdoutChunks = [],
+  stderrChunks = [],
+  exitCode = 0,
+  emitDelayMs = 0,
+}) {
+  const proc = new EventEmitter();
+  proc.stdout = new EventEmitter();
+  proc.stderr = new EventEmitter();
 
-const createDownloadProcess = (destinationPath) => {
-  const stdout = new EventEmitter();
-  const stderr = new EventEmitter();
-  const promise = new Promise((resolve) => {
-    setImmediate(() => {
-      stdout.emit('data', Buffer.from('50%'));
-      stdout.emit('data', Buffer.from(`Destination: ${destinationPath}`));
-      resolve();
-    });
-  });
-  promise.stdout = stdout;
-  promise.stderr = stderr;
-  return promise;
-};
+  setTimeout(() => {
+    stdoutChunks.forEach((chunk) =>
+      proc.stdout.emit("data", Buffer.from(chunk)),
+    );
+    stderrChunks.forEach((chunk) =>
+      proc.stderr.emit("data", Buffer.from(chunk)),
+    );
+    proc.emit("exit", exitCode);
+  }, emitDelayMs);
+
+  return proc;
+}
 
 beforeEach(() => {
   jest.clearAllMocks();
+
+  // Default: execFile returns a successful download with a Destination line.
   let call = 0;
-  youtubedl.exec.mockImplementation((url, options) => {
+  execFileMock.mockImplementation((_file, args, _opts) => {
     call += 1;
-    const template = (options && options.output) || `/tmp/output${call}.%(ext)s`;
+
+    // Extract the output template passed to yt-dlp: ["--output", TEMPLATE]
+    const outIdx = Array.isArray(args) ? args.indexOf("--output") : -1;
+    const template =
+      outIdx >= 0 && typeof args[outIdx + 1] === "string"
+        ? args[outIdx + 1]
+        : `/tmp/output${call}.%(title)s.%(ext)s`;
+
+    // Simulate a resolved destination path from the template
     const destinationPath = template
-      .replace('%(title)s', `sample_${call}`)
-      .replace('%(ext)s', 'm4a');
-    return createDownloadProcess(destinationPath);
+      .replace("%(title)s", `sample_${call}`)
+      .replace("%(ext)s", "m4a");
+
+    return createExecFileProcess({
+      stdoutChunks: [`Destination: ${destinationPath}\n`],
+      stderrChunks: ["50%\n"],
+      exitCode: 0,
+      emitDelayMs: 0,
+    });
   });
 });
 
-describe('downloader library', () => {
-  it('converts video downloads to mp3 when requested', async () => {
+describe("downloader library (unit)", () => {
+  it("converts video downloads to mp3 when requested", async () => {
     const progressSpy = jest.fn();
+
     const result = await downloadVideo(
-      'https://youtu.be/example',
-      '/tmp/output',
+      "https://youtu.be/example",
+      "/tmp/output",
       progressSpy,
-      { format: 'mp3' }
+      { format: "mp3" },
     );
 
-    expect(result.format).toBe('mp3');
-    expect(result.filePath.endsWith('.mp3')).toBe(true);
+    expect(result.format).toBe("mp3");
+    expect(result.filePath.endsWith(".mp3")).toBe(true);
+
+    // Progress callback should have been called at least once
     expect(progressSpy).toHaveBeenCalled();
+
+    // Ensure output directory created
+    expect(ensureDir).toHaveBeenCalled();
+
+    // ffmpeg conversion invoked
+    const ffmpeg = require("fluent-ffmpeg");
     expect(ffmpeg).toHaveBeenCalled();
+
+    // Original file should be removed after conversion
+    expect(remove).toHaveBeenCalled();
   });
 
-  it('limits playlist downloads to selected video IDs', async () => {
-    ytpl.mockResolvedValue({
-      title: 'Test Playlist',
+  it("limits playlist downloads to selected video IDs", async () => {
+    ytplMock.mockResolvedValue({
+      title: "Test Playlist",
       items: [
-        { id: 'first', title: 'First video' },
-        { id: 'second', title: 'Second video' }
-      ]
+        { id: "first", title: "First video" },
+        { id: "second", title: "Second video" },
+      ],
     });
 
     const result = await downloadPlaylist(
-      'https://www.youtube.com/playlist?list=test',
-      '/tmp/out',
+      "https://www.youtube.com/playlist?list=test",
+      "/tmp/out",
       jest.fn(),
       {
-        selectedVideoIds: ['second'],
-        format: 'mp3'
-      }
+        selectedVideoIds: ["second"],
+        format: "mp3",
+      },
     );
 
     expect(result.files).toHaveLength(1);
-    expect(result.files[0].endsWith('.mp3')).toBe(true);
-    expect(youtubedl.exec).toHaveBeenCalledTimes(1);
+    expect(result.files[0].endsWith(".mp3")).toBe(true);
+
+    // Only one download should be executed due to selection
+    expect(execFileMock).toHaveBeenCalledTimes(1);
+
+    // Ensure it downloaded the selected video (constructed URL includes id)
+    const args = execFileMock.mock.calls[0][1];
+    expect(args).toEqual(
+      expect.arrayContaining(["https://www.youtube.com/watch?v=second"]),
+    );
   });
 });

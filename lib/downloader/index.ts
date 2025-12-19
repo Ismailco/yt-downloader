@@ -1,6 +1,7 @@
 import path from "path";
 import fs from "fs-extra";
-import youtubedl from "youtube-dl-exec";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import ytpl from "ytpl";
 import ffmpeg from "fluent-ffmpeg";
 import {
@@ -10,6 +11,12 @@ import {
   VideoResult,
   PlaylistResult,
 } from "../../types";
+
+const execFileAsync = promisify(execFile);
+
+// yt-dlp is installed into the container at this path in dev.
+// Allow override for other deployments.
+const YT_DLP_BIN = process.env.YT_DLP_BIN || "/usr/local/bin/yt-dlp";
 
 type FetchPlaylistFn = (url: string) => Promise<unknown>;
 const fetchPlaylist =
@@ -21,21 +28,9 @@ type YoutubeDlExecProcess = Promise<unknown> & {
   stderr?: NodeJS.ReadableStream;
 };
 
-function getYoutubeDlExec(): (
-  url: string,
-  options: Record<string, unknown>,
-  spawnOptions: Record<string, unknown>,
-) => YoutubeDlExecProcess {
-  const mod = youtubedl as unknown as { exec?: unknown };
-  if (typeof mod.exec !== "function") {
-    throw new Error("youtube-dl exec function is not available");
-  }
-  return mod.exec as (
-    url: string,
-    options: Record<string, unknown>,
-    spawnOptions: Record<string, unknown>,
-  ) => YoutubeDlExecProcess;
-}
+// youtube-dl-exec is no longer used here because it resolves a bundled `yt-dlp`
+// binary under node_modules, which is not available in our container setup.
+// We execute the system-installed yt-dlp directly via execFile.
 
 async function convertToMp3(inputPath: string): Promise<string> {
   const directory = path.dirname(inputPath);
@@ -130,18 +125,33 @@ async function executeDownload(
   let filePath: string | null = null;
   let lastPercent = 0;
 
-  const download = getYoutubeDlExec()(
+  const args = [
     videoUrl,
-    {
-      output: outputTemplate,
-      format: formatSelector,
-      progress: true,
-    },
-    { stdio: ["ignore", "pipe", "pipe"] },
-  );
 
-  if (download.stdout) {
-    download.stdout.on("data", (data: Buffer) => {
+    // Output + format
+    "--output",
+    outputTemplate,
+    "--format",
+    formatSelector,
+
+    // Progress output (goes to stderr)
+    "--progress",
+    "--newline",
+
+    // Reduce noise but keep progress readable
+    "--no-warnings",
+
+    // Helpful for some environments
+    "--no-check-certificates",
+  ];
+
+  const child = execFile(YT_DLP_BIN, args, {
+    maxBuffer: 50 * 1024 * 1024,
+  });
+
+  // yt-dlp prints progress lines to stderr; destination/merge lines can be on stdout/stderr.
+  if (child.stdout) {
+    child.stdout.on("data", (data: Buffer) => {
       const chunk = data.toString();
       const percent = extractPercentage(chunk);
       const maybePath = extractFilePath(chunk);
@@ -157,20 +167,42 @@ async function executeDownload(
     });
   }
 
-  if (download.stderr) {
-    download.stderr.on("data", (data: Buffer) => {
-      const chunk = data.toString().trim();
-      if (chunk) {
-        onProgress(lastPercent, chunk);
+  if (child.stderr) {
+    child.stderr.on("data", (data: Buffer) => {
+      const chunk = data.toString();
+      const percent = extractPercentage(chunk);
+      const maybePath = extractFilePath(chunk);
+
+      if (maybePath) {
+        filePath = maybePath;
+      }
+
+      if (typeof percent === "number" && percent >= lastPercent) {
+        lastPercent = percent;
+        onProgress(percent, chunk.trim());
+        return;
+      }
+
+      const trimmed = chunk.trim();
+      if (trimmed) {
+        onProgress(lastPercent, trimmed);
       }
     });
   }
 
   try {
-    await download;
+    // execFile returns a ChildProcess; await completion by promisifying execFile separately.
+    // We intentionally spawn once above to stream progress; here we only wait for exit.
+    await new Promise<void>((resolve, reject) => {
+      child.on("error", reject);
+      child.on("exit", (code) => {
+        if (code === 0) return resolve();
+        reject(new Error(`yt-dlp exited with code ${code ?? "unknown"}`));
+      });
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
-    throw new Error(`youtube-dl failed: ${message}`);
+    throw new Error(`yt-dlp failed: ${message}`);
   }
 
   if (!filePath) {

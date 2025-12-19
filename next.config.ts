@@ -3,6 +3,15 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   serverExternalPackages: ["ytpl", "youtube-dl-exec", "fluent-ffmpeg"],
 
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "i.ytimg.com",
+      },
+    ],
+  },
+
   turbopack: {},
 
   // Enable hot reload for all environments
