@@ -6,8 +6,11 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
-    "test": "jest --runInBand"
+    "lint": "eslint .",
+    "test": "jest --runInBand",
+    "dev:docker": "docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build",
+    "dev:docker:clean": "docker compose -f docker-compose.yml -f docker-compose.dev.yml down -v && docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build",
+    "worker:dev": "ts-node workers/downloadWorker.ts"
   },
   "dependencies": {
     "bullmq": "^5.66.1",

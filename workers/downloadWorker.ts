@@ -90,9 +90,9 @@ async function finalizeFiles(
 }
 
 function buildFileMeta(jobId: string, files: string[]) {
-  const token = signDownloadToken(jobId);
   return files.map((filePath: string) => {
     const name = path.basename(filePath);
+    const token = encodeURIComponent(signDownloadToken(jobId, name));
     return {
       name,
       path: filePath,

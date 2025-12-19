@@ -8,7 +8,12 @@ interface RateLimitRecord {
 interface RateLimitOptions {
   windowMs?: number;
   max?: number;
-  keyGenerator?: (req: any) => string;
+  keyGenerator?: (req: RequestLike) => string;
+}
+
+interface RequestLike {
+  headers?: Record<string, string | string[] | undefined>;
+  ip?: string;
 }
 
 const rateLimitMaps = new Map<string, Map<string, RateLimitRecord>>();
@@ -23,11 +28,17 @@ function getOrCreateMap(name: string): Map<string, RateLimitRecord> {
 export function createRateLimiter(name: string, options: RateLimitOptions = {}) {
   const windowMs = options.windowMs ?? 60 * 1000;
   const max = options.max ?? 20;
-  const keyGenerator = options.keyGenerator ?? ((req: any) =>
-    req.headers?.['x-forwarded-for'] || req.ip || 'unknown'
-  );
+  const keyGenerator =
+    options.keyGenerator ??
+    ((req: RequestLike) => {
+      const forwardedFor = req.headers?.['x-forwarded-for'];
+      if (Array.isArray(forwardedFor)) {
+        return forwardedFor[0] || req.ip || 'unknown';
+      }
+      return forwardedFor || req.ip || 'unknown';
+    });
 
-  return function checkRateLimit(req: any): { allowed: boolean; remaining: number } {
+  return function checkRateLimit(req: RequestLike): { allowed: boolean; remaining: number } {
     const map = getOrCreateMap(name);
     const key = keyGenerator(req);
     const now = Date.now();

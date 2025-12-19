@@ -3,8 +3,6 @@
 import { useState, ChangeEvent } from "react";
 import { UrlInputProps, AnalyzeResult } from "@/types";
 
-const API_KEY = process.env.NEXT_PUBLIC_API_KEY || "";
-
 export default function UrlInput({
   type,
   onAnalyzeComplete,
@@ -36,7 +34,6 @@ export default function UrlInput({
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-api-key": API_KEY,
         },
         body: JSON.stringify({ url, type }),
       });

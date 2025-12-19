@@ -9,9 +9,33 @@ import {
   DownloadOptions,
   VideoResult,
   PlaylistResult,
-} from "@/types";
+} from "../../types";
 
-const fetchPlaylist = (ytpl as any).default || ytpl;
+type FetchPlaylistFn = (url: string) => Promise<unknown>;
+const fetchPlaylist =
+  (ytpl as unknown as { default?: FetchPlaylistFn }).default ||
+  (ytpl as unknown as FetchPlaylistFn);
+
+type YoutubeDlExecProcess = Promise<unknown> & {
+  stdout?: NodeJS.ReadableStream;
+  stderr?: NodeJS.ReadableStream;
+};
+
+function getYoutubeDlExec(): (
+  url: string,
+  options: Record<string, unknown>,
+  spawnOptions: Record<string, unknown>,
+) => YoutubeDlExecProcess {
+  const mod = youtubedl as unknown as { exec?: unknown };
+  if (typeof mod.exec !== "function") {
+    throw new Error("youtube-dl exec function is not available");
+  }
+  return mod.exec as (
+    url: string,
+    options: Record<string, unknown>,
+    spawnOptions: Record<string, unknown>,
+  ) => YoutubeDlExecProcess;
+}
 
 async function convertToMp3(inputPath: string): Promise<string> {
   const directory = path.dirname(inputPath);
@@ -44,9 +68,10 @@ const noop: ProgressCallback = () => {};
 async function ensureDirectory(targetDir: string): Promise<void> {
   try {
     await fs.ensureDir(targetDir);
-  } catch (error: any) {
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
     throw new Error(
-      `Failed to prepare output directory "${targetDir}": ${error.message}`,
+      `Failed to prepare output directory "${targetDir}": ${message}`,
     );
   }
 }
@@ -105,7 +130,7 @@ async function executeDownload(
   let filePath: string | null = null;
   let lastPercent = 0;
 
-  const download = (youtubedl as any).exec(
+  const download = getYoutubeDlExec()(
     videoUrl,
     {
       output: outputTemplate,
@@ -229,6 +254,11 @@ async function downloadPlaylist(
   const resolvedDir = path.resolve(outputDir);
   const playlist = await fetchPlaylist(playlistUrl);
 
+  const playlistData = playlist as unknown as {
+    title?: string;
+    items: Array<{ id: string; title?: string }>;
+  };
+
   const targetFormat = options.format === "mp3" ? "mp3" : "mp4";
   const formatSelector = targetFormat === "mp3" ? AUDIO_FORMAT : VIDEO_FORMAT;
 
@@ -238,14 +268,14 @@ async function downloadPlaylist(
       : null;
 
   const itemsToDownload = selectedIds
-    ? playlist.items.filter((item: any) => selectedIds.has(item.id))
-    : playlist.items;
+    ? playlistData.items.filter((item) => selectedIds.has(item.id))
+    : playlistData.items;
 
   if (!itemsToDownload.length) {
     throw new Error("No matching videos found in playlist.");
   }
 
-  const folderName = sanitizeName(playlist.title);
+  const folderName = sanitizeName(playlistData.title || "playlist");
   const playlistDir = path.join(resolvedDir, folderName);
   await ensureDirectory(playlistDir);
 

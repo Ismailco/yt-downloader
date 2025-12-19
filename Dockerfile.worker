@@ -3,24 +3,35 @@
 FROM node:20-bullseye AS base
 ENV PNPM_HOME="/root/.local/share/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
-RUN corepack enable
+# Pin pnpm to avoid Corepack interactive prompt and keep builds reproducible
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+RUN corepack enable && corepack prepare pnpm@10.26.1 --activate
 WORKDIR /app
 
 FROM base AS deps
 COPY package.json pnpm-lock.yaml* ./
 RUN pnpm install --frozen-lockfile
 
+FROM base AS builder
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+RUN pnpm exec tsc -p tsconfig.build.json
+
 FROM node:20-bullseye
 ENV NODE_ENV=production
 ENV PNPM_HOME="/root/.local/share/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
+# Pin pnpm to avoid Corepack interactive prompt and keep builds reproducible
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 RUN corepack enable \
+ && corepack prepare pnpm@10.26.1 --activate \
  && apt-get update \
  && apt-get install -y --no-install-recommends ffmpeg \
  && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 
 COPY --from=deps /app/node_modules ./node_modules
-COPY . .
+COPY --from=builder /app/dist ./dist
+COPY package.json ./
 
-CMD ["node", "workers/start.js"]
+CMD ["node", "dist/workers/downloadWorker.js"]

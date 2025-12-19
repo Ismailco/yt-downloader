@@ -2,28 +2,28 @@
 
 const path = require('path');
 const os = require('os');
-const chalk = require('chalk');
-const cliProgress = require('cli-progress');
-const { downloadVideo, downloadPlaylist } = require('../lib/downloader');
 
-const progressOptions = {
-  format: `${chalk.cyan('{bar}')} | ${chalk.yellow('{percentage}%')} | {state}`,
-  barCompleteChar: '\u2588',
-  barIncompleteChar: '\u2591',
-  hideCursor: true,
-  clearOnComplete: true
-};
-
-function createProgressBar(initialState = 'Starting...') {
-  const bar = new cliProgress.SingleBar(progressOptions);
-  bar.start(100, 0, { state: initialState });
-  return bar;
+function loadDownloader() {
+  try {
+    return require('../dist/lib/downloader');
+  } catch {
+    try {
+      require('ts-node/register');
+      return require('../lib/downloader');
+    } catch {
+      throw new Error(
+        'Unable to load downloader. Run `pnpm exec tsc -p tsconfig.build.json` first, or install dev dependencies.',
+      );
+    }
+  }
 }
 
+const { downloadVideo, downloadPlaylist } = loadDownloader();
+
 function printUsage() {
-  console.log(chalk.yellow('Usage: ytdown [-v VIDEO_URL | -p PLAYLIST_URL]'));
-  console.log(chalk.gray('Example: ytdown -v https://www.youtube.com/watch?v=dQw4w9WgXcQ'));
-  console.log(chalk.gray('Example: ytdown -p https://www.youtube.com/playlist?list=PLxxx'));
+  console.log('Usage: ytdown [-v VIDEO_URL | -p PLAYLIST_URL]');
+  console.log('Example: ytdown -v https://www.youtube.com/watch?v=dQw4w9WgXcQ');
+  console.log('Example: ytdown -p https://www.youtube.com/playlist?list=PLxxx');
 }
 
 async function run() {
@@ -38,43 +38,43 @@ async function run() {
   const baseOutputPath = path.join(os.homedir(), 'Movies', 'Youtube_Downloader');
 
   if (flag === '-v') {
-    const bar = createProgressBar('Preparing video download...');
+    process.stdout.write('Starting video download...\n');
     try {
       const result = await downloadVideo(url, baseOutputPath, (percent, message) => {
-        const label = message ? message.substring(0, 40) : 'Downloading video...';
-        bar.update(Math.min(100, percent || 0), { state: label });
+        const pct = Math.min(100, percent || 0).toFixed(0);
+        const label = message ? message.substring(0, 80) : 'Downloading video...';
+        process.stdout.write(`\r${pct}% ${label}`);
       });
-      bar.stop();
-      console.log(chalk.green('\n✅ Video downloaded successfully.'));
-      console.log(chalk.yellow(`📁 Saved to: ${result.filePath}`));
+      process.stdout.write('\nVideo downloaded successfully.\n');
+      console.log(`Saved to: ${result.filePath}`);
     } catch (error) {
-      bar.stop();
-      console.error(chalk.red(`❌ ${error.message}`));
+      process.stdout.write('\n');
+      console.error(error && error.message ? error.message : String(error));
       process.exitCode = 1;
     }
     return;
   }
 
   if (flag === '-p') {
-    const bar = createProgressBar('Preparing playlist download...');
+    process.stdout.write('Starting playlist download...\n');
     try {
       const result = await downloadPlaylist(url, baseOutputPath, ({ videoIndex, percent, message }) => {
-        const label = message ? message.substring(0, 50) : `Processing video #${videoIndex + 1}`;
-        bar.update(Math.min(100, percent || 0), { state: label });
+        const pct = Math.min(100, percent || 0).toFixed(0);
+        const label = message ? message.substring(0, 80) : `Processing video #${videoIndex + 1}`;
+        process.stdout.write(`\r${pct}% ${label}`);
       });
-      bar.stop();
-      console.log(chalk.green('\n✅ Playlist downloaded successfully.'));
-      console.log(chalk.yellow(`📁 Folder: ${result.folderPath}`));
-      console.log(chalk.gray(`Total files: ${result.files.length}`));
+      process.stdout.write('\nPlaylist downloaded successfully.\n');
+      console.log(`Folder: ${result.folderPath}`);
+      console.log(`Total files: ${result.files.length}`);
     } catch (error) {
-      bar.stop();
-      console.error(chalk.red(`❌ ${error.message}`));
+      process.stdout.write('\n');
+      console.error(error && error.message ? error.message : String(error));
       process.exitCode = 1;
     }
     return;
   }
 
-  console.log(chalk.red('❌ Invalid flag. Use -v for video or -p for playlist.'));
+  console.log('Invalid flag. Use -v for video or -p for playlist.');
   printUsage();
   process.exitCode = 1;
 }

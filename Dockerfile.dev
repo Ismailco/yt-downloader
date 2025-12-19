@@ -1,0 +1,36 @@
+# syntax=docker/dockerfile:1.6
+
+# Use Debian bookworm so `python3` is 3.11+, which is compatible with current yt-dlp.
+FROM node:20-bookworm AS base
+ENV PNPM_HOME="/root/.local/share/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+# Pin pnpm to avoid Corepack interactive prompt and keep builds reproducible
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+RUN corepack enable && corepack prepare pnpm@10.26.1 --activate
+WORKDIR /app
+
+FROM base AS deps
+COPY package.json pnpm-lock.yaml* ./
+RUN pnpm install --frozen-lockfile
+
+FROM base AS dev
+ENV NODE_ENV=development
+
+# Debian bullseye doesn't ship yt-dlp in the default repos reliably.
+# Install runtime deps via apt, then install yt-dlp from the official release.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
+    python3 \
+    ca-certificates \
+    curl \
+    && rm -rf /var/lib/apt/lists/* \
+ && curl -L --fail "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp" -o /usr/local/bin/yt-dlp \
+ && chmod +x /usr/local/bin/yt-dlp \
+ && /usr/local/bin/yt-dlp --version
+
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+
+EXPOSE 3000
+
+CMD ["pnpm", "dev"]

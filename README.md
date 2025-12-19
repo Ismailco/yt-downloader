@@ -107,7 +107,7 @@ Open [http://localhost:3000](http://localhost:3000) to use the app.
 
 ## API Endpoints
 
-All API endpoints require the `x-api-key` header.
+All API endpoints are accessible without an API key.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -122,7 +122,7 @@ All API endpoints require the `x-api-key` header.
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `API_KEY` | API key for authentication | Required |
+| `API_KEY` | (Removed) Previously used for API authentication | N/A |
 | `DOWNLOAD_TOKEN_SECRET` | Secret for signing download URLs | Required |
 | `REDIS_URL` | Redis connection URL | `redis://localhost:6379` |
 | `REDIS_HOST` | Redis host (if not using URL) | `127.0.0.1` |
@@ -131,7 +131,7 @@ All API endpoints require the `x-api-key` header.
 | `OUTPUT_BASE` | Base directory for downloads | `./` |
 | `CONCURRENCY` | Worker concurrency | `2` |
 | `STORAGE_TTL_HOURS` | Hours before cleanup | `24` |
-| `NEXT_PUBLIC_API_KEY` | API key for frontend | Same as `API_KEY` |
+| `NEXT_PUBLIC_API_KEY` | (Removed) Previously used for frontend API authentication | N/A |
 
 ## Docker Deployment
 
@@ -139,7 +139,6 @@ All API endpoints require the `x-api-key` header.
 
 ```bash
 # Set environment variables
-export API_KEY=your-secure-api-key
 export DOWNLOAD_TOKEN_SECRET=your-secure-secret
 
 # Build and start all services
@@ -160,7 +159,7 @@ docker compose logs -f
 
 ### Pre-deployment
 
-- [ ] Generate secure `API_KEY` (min 32 characters)
+- [ ] (Removed) API key is no longer required
 - [ ] Generate secure `DOWNLOAD_TOKEN_SECRET` (min 32 characters)
 - [ ] Configure Redis (consider Redis Cloud for production)
 - [ ] Set up SSL certificates for HTTPS

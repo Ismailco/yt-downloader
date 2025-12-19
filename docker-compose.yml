@@ -1,5 +1,3 @@
-version: '3.9'
-
 services:
   redis:
     image: redis:7-alpine
@@ -17,12 +15,14 @@ services:
     environment:
       NODE_ENV: production
       REDIS_URL: redis://redis:6379/0
-      API_KEY: ${API_KEY:-changeme}
+
       DOWNLOAD_TOKEN_SECRET: ${DOWNLOAD_TOKEN_SECRET:-changeme}
       OUTPUT_BASE: /data
     volumes:
       - storage:/data/storage
       - tmp:/data/tmp
+    ports:
+      - "3000:3000"
     expose:
       - "3000"
 
@@ -36,7 +36,7 @@ services:
     environment:
       NODE_ENV: production
       REDIS_URL: redis://redis:6379/0
-      API_KEY: ${API_KEY:-changeme}
+
       DOWNLOAD_TOKEN_SECRET: ${DOWNLOAD_TOKEN_SECRET:-changeme}
       OUTPUT_BASE: /data
       CONCURRENCY: ${CONCURRENCY:-2}

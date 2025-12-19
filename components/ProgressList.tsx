@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Job, ProgressListProps } from "@/types";
+import { ProgressListProps } from "@/types";
 
 const API_BASE = "/api/jobs";
 
@@ -29,9 +29,9 @@ function mergeJobState(
   };
 }
 
-export default function ProgressList({ jobs = [], apiKey }: ProgressListProps) {
+export default function ProgressList({ jobs = [] }: ProgressListProps) {
   const [jobStates, setJobStates] = useState<Record<string, JobState>>({});
-  const sourcesRef = useRef<Record<string, EventSource>>({});
+  const controllersRef = useRef<Record<string, AbortController>>({});
 
   const trackedJobIds = useMemo(
     () => jobs.map((job) => String(job.id || "")),
@@ -40,80 +40,110 @@ export default function ProgressList({ jobs = [], apiKey }: ProgressListProps) {
 
   useEffect(() => {
     trackedJobIds.forEach((jobId) => {
-      if (!jobId || sourcesRef.current[jobId]) {
+      if (!jobId || controllersRef.current[jobId]) {
         return;
       }
 
-      const url = `${API_BASE}/${jobId}/events${
-        apiKey ? `?apiKey=${encodeURIComponent(apiKey)}` : ""
-      }`;
-      const source = new EventSource(url);
-      sourcesRef.current[jobId] = source;
+      const controller = new AbortController();
+      controllersRef.current[jobId] = controller;
 
-      source.onmessage = (event) => {
+      const connect = async () => {
         try {
-          const payload = JSON.parse(event.data);
-          if (payload.type === "progress") {
-            setJobStates((prev) =>
-              mergeJobState(prev, jobId, {
-                status: "active",
-                percent: payload.percent ?? 0,
-                message: payload.message,
-                videoIndex: payload.videoIndex ?? null,
-              }),
-            );
-          } else if (payload.type === "complete") {
-            setJobStates((prev) =>
-              mergeJobState(prev, jobId, {
-                status: "completed",
-                percent: 100,
-                downloadUrl: payload.url || payload.folderPath,
-                files: payload.files || null,
-                message: "Download ready",
-              }),
-            );
-            source.close();
-            delete sourcesRef.current[jobId];
-          } else if (payload.type === "error") {
-            setJobStates((prev) =>
-              mergeJobState(prev, jobId, {
-                status: "failed",
-                percent: 0,
-                error: payload.message,
-              }),
-            );
-            source.close();
-            delete sourcesRef.current[jobId];
+          const response = await fetch(`${API_BASE}/${jobId}/events`, {
+            signal: controller.signal,
+          });
+
+          if (!response.ok || !response.body) {
+            throw new Error(`SSE connection failed (${response.status})`);
           }
-        } catch (err) {
-          console.error("Failed to parse job event", err);
+
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = "";
+
+          while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            let idx;
+            while ((idx = buffer.indexOf("\n\n")) >= 0) {
+              const rawEvent = buffer.slice(0, idx);
+              buffer = buffer.slice(idx + 2);
+
+              const dataLine = rawEvent
+                .split("\n")
+                .find((line) => line.startsWith("data: "));
+              if (!dataLine) continue;
+
+              try {
+                const payload = JSON.parse(dataLine.slice(6));
+                if (payload.type === "progress") {
+                  setJobStates((prev) =>
+                    mergeJobState(prev, jobId, {
+                      status: "active",
+                      percent: payload.percent ?? 0,
+                      message: payload.message,
+                      videoIndex: payload.videoIndex ?? null,
+                    }),
+                  );
+                } else if (payload.type === "complete") {
+                  setJobStates((prev) =>
+                    mergeJobState(prev, jobId, {
+                      status: "completed",
+                      percent: 100,
+                      downloadUrl: payload.url || payload.folderPath,
+                      files: payload.files || null,
+                      message: "Download ready",
+                    }),
+                  );
+                  controller.abort();
+                  delete controllersRef.current[jobId];
+                } else if (payload.type === "error") {
+                  setJobStates((prev) =>
+                    mergeJobState(prev, jobId, {
+                      status: "failed",
+                      percent: 0,
+                      error: payload.message,
+                    }),
+                  );
+                  controller.abort();
+                  delete controllersRef.current[jobId];
+                }
+              } catch (err) {
+                console.error("Failed to parse job event", err);
+              }
+            }
+          }
+        } catch {
+          if (controller.signal.aborted) {
+            return;
+          }
+          setJobStates((prev) =>
+            mergeJobState(prev, jobId, {
+              status: "reconnecting",
+              message: "Connection lost. Retrying...",
+            }),
+          );
+          delete controllersRef.current[jobId];
+          setTimeout(() => {
+            setJobStates((prev) =>
+              mergeJobState(prev, jobId, { status: "reconnecting" }),
+            );
+          }, 3000);
         }
       };
 
-      source.onerror = () => {
-        setJobStates((prev) =>
-          mergeJobState(prev, jobId, {
-            status: "reconnecting",
-            message: "Connection lost. Retrying...",
-          }),
-        );
-        source.close();
-        delete sourcesRef.current[jobId];
-        setTimeout(() => {
-          setJobStates((prev) =>
-            mergeJobState(prev, jobId, { status: "reconnecting" }),
-          );
-        }, 3000);
-      };
+      void connect();
     });
 
     return () => {
-      Object.values(sourcesRef.current).forEach((src) => {
-        src.close();
+      Object.values(controllersRef.current).forEach((ctrl) => {
+        ctrl.abort();
       });
-      sourcesRef.current = {};
+      controllersRef.current = {};
     };
-  }, [trackedJobIds, apiKey]);
+  }, [trackedJobIds]);
 
   if (!trackedJobIds.length) {
     return (

@@ -1,13 +1,5 @@
-import { NextApiRequest, NextApiResponse } from 'next';
+// This project no longer uses API key authentication.
+// This file is intentionally empty to preserve import stability if any stale build
+// artifacts or downstream code still references it. Remove any such imports.
 
-export function requireApiKey(req: NextApiRequest, res: NextApiResponse): boolean {
-  const headerKey = req.headers['x-api-key'];
-  const expectedKey = process.env.API_KEY;
-
-  if (!expectedKey || headerKey !== expectedKey) {
-    res.status(401).json({ error: 'Unauthorized' });
-    return false;
-  }
-
-  return true;
-}
+export {};

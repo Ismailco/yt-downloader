@@ -14,8 +14,6 @@ import {
   QualityType,
 } from "@/types";
 
-const API_KEY = process.env.NEXT_PUBLIC_API_KEY || "";
-
 export default function HomePage() {
   const [mode, setMode] = useState<"video" | "playlist">("video");
   const [selectedFormat, setSelectedFormat] = useState<FormatType>("mp4");
@@ -87,7 +85,6 @@ export default function HomePage() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-api-key": API_KEY,
         },
         body: JSON.stringify(payload),
       });
@@ -267,7 +264,7 @@ export default function HomePage() {
               </span>
             </div>
             <div className="mt-4">
-              <ProgressList jobs={jobs} apiKey={API_KEY} />
+              <ProgressList jobs={jobs} />
             </div>
           </aside>
         </div>

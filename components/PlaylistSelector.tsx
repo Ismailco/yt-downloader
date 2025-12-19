@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo } from "react";
-import { PlaylistItem, PlaylistSelectorProps } from "@/types";
+import Image from "next/image";
+import { PlaylistSelectorProps } from "@/types";
 
 export default function PlaylistSelector({
   items = [],
@@ -100,11 +101,12 @@ export default function PlaylistSelector({
                 </p>
               </div>
               {item.thumbnail && (
-                <img
+                <Image
                   src={item.thumbnail}
                   alt={item.title}
+                  width={96}
+                  height={56}
                   className="h-14 w-24 rounded object-cover"
-                  loading="lazy"
                 />
               )}
             </label>
