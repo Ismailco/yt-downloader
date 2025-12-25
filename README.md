@@ -37,7 +37,7 @@ A modern, self-hosted YouTube video and playlist downloader with a beautiful web
 ### 1. Clone and Install
 
 ```bash
-git clone <REPO_URL>
+git clone git@github.com:Ismailco/yt-downloader.git
 cd yt-downloader
 pnpm install
 ```
