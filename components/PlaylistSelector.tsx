@@ -41,9 +41,9 @@ export default function PlaylistSelector({
   if (!items.length) {
     return (
       <div
-        className={`rounded-xl border border-slate-800 bg-slate-900/40 p-6 ${className}`}
+        className={`ui-card bg-card-muted p-6 ${className}`}
       >
-        <p className="text-sm text-slate-400">
+        <p className="text-sm text-muted">
           Analyze a playlist to pick specific videos.
         </p>
       </div>
@@ -54,15 +54,15 @@ export default function PlaylistSelector({
     <div className={`space-y-4 ${className}`}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h3 className="text-lg font-semibold text-white">Playlist Items</h3>
-          <p className="text-xs text-slate-400">
+          <h3 className="text-lg font-semibold text-foreground">Playlist Items</h3>
+          <p className="text-xs text-muted">
             Selected {selectedCount}/{totalItems || 0}
           </p>
         </div>
         <button
           type="button"
           onClick={handleSelectAll}
-          className="text-sm font-medium text-cyan-400 hover:text-cyan-300"
+          className="ui-link text-sm"
         >
           {allSelected ? "Clear selection" : "Select all"}
         </button>
@@ -74,10 +74,10 @@ export default function PlaylistSelector({
           return (
             <label
               key={item.id}
-              className={`flex cursor-pointer gap-3 rounded-lg border px-3 py-3 transition ${
+              className={`flex cursor-pointer gap-3 rounded-xl border px-3 py-3 transition focus-within:ring-2 focus-within:ring-ring/20 ${
                 checked
-                  ? "border-cyan-400 bg-cyan-400/10"
-                  : "border-slate-800 bg-slate-900/50 hover:border-slate-700"
+                  ? "border-primary bg-primary/10"
+                  : "border-border bg-card hover:bg-card-muted"
               }`}
             >
               <input
@@ -91,11 +91,11 @@ export default function PlaylistSelector({
                       selectedIds.includes(item.id);
                 }}
                 onChange={() => toggleItem(item.id)}
-                className="mt-1 h-4 w-4 accent-cyan-400"
+                className="mt-1 h-4 w-4 accent-primary"
               />
               <div className="flex-1">
-                <p className="font-semibold text-white">{item.title}</p>
-                <p className="text-xs text-slate-400">
+                <p className="text-sm font-semibold text-foreground">{item.title}</p>
+                <p className="text-xs text-muted">
                   {item.channelTitle || "Unknown channel"} •{" "}
                   {item.duration || "—"}
                 </p>
@@ -106,7 +106,7 @@ export default function PlaylistSelector({
                   alt={item.title}
                   width={96}
                   height={56}
-                  className="h-14 w-24 rounded object-cover"
+                  className="h-14 w-24 rounded-lg object-cover"
                 />
               )}
             </label>

@@ -14,6 +14,8 @@ services:
       - .:/app
       - /app/node_modules
       - /app/.next
+      - storage:/data/storage
+      - tmp:/data/tmp
     ports:
       - "3000:3000"
     command: pnpm dev
@@ -39,6 +41,8 @@ services:
     tty: true
 
   redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
     ports:
       - "6379:6379"
 

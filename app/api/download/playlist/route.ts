@@ -1,8 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
 import { downloadQueue } from "@/utils/queue";
 import { isAllowedYouTubeUrl } from "@/utils/youtubeUrl";
+import { createRateLimiter } from "@/lib/middleware/rateLimit";
+
+const RATE_LIMIT_WINDOW_MS = 60 * 1000;
+const RATE_LIMIT_MAX = 5;
+const checkRateLimit = createRateLimiter("download:playlist", {
+  windowMs: RATE_LIMIT_WINDOW_MS,
+  max: RATE_LIMIT_MAX,
+});
 
 export async function POST(request: NextRequest) {
+  const forwardedFor = request.headers.get("x-forwarded-for") || undefined;
+  const ip = forwardedFor ? forwardedFor.split(",")[0]?.trim() : undefined;
+  const rate = checkRateLimit({ headers: { "x-forwarded-for": forwardedFor }, ip });
+  if (!rate.allowed) {
+    return NextResponse.json(
+      { error: "Too many playlist download requests, please slow down." },
+      { status: 429 },
+    );
+  }
+
   let body;
   try {
     body = await request.json();

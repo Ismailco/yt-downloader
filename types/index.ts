@@ -9,6 +9,7 @@ export interface PlaylistItem {
 export interface AnalyzeResult {
   title: string;
   duration?: string;
+  thumbnail?: string;
   items?: PlaylistItem[];
   type?: "video" | "playlist";
 }
@@ -99,7 +100,7 @@ export interface PlaylistSelectorProps {
 
 export interface ProgressListProps {
   jobs: Job[];
-  apiKey: string;
+  apiKey?: string;
 }
 
 export const FORMAT_OPTIONS = [

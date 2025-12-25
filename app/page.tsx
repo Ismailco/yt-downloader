@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
+import Image from "next/image";
 import UrlInput from "@/components/UrlInput";
 import PlaylistSelector from "@/components/PlaylistSelector";
 import ProgressList from "@/components/ProgressList";
@@ -71,6 +72,7 @@ export default function HomePage() {
             }
           : {
               url,
+              selectedVideoIds: selectedVideos,
               options: {
                 format: selectedFormat,
                 quality: selectedQuality,
@@ -110,31 +112,29 @@ export default function HomePage() {
   )?.label;
 
   return (
-    <main className="min-h-screen bg-linear-to-b from-slate-950 via-slate-900 to-slate-950 text-white">
-      <div className="mx-auto max-w-5xl px-6 py-10">
-        <header className="mb-10 text-center">
-          <p className="text-sm uppercase tracking-[0.4em] text-cyan-300">
-            Ytdown
-          </p>
-          <h1 className="mt-3 text-4xl font-semibold text-white md:text-5xl">
-            Download videos & playlists effortlessly.
-          </h1>
-          <p className="mt-4 text-lg text-slate-400">
-            Queue YouTube downloads, monitor progress in real time, and fetch
-            files when ready.
-          </p>
+    <main className="min-h-screen bg-background text-foreground">
+      <div className="mx-auto max-w-5xl px-6 py-12">
+        <header className="mb-10">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm font-semibold text-foreground">YT Downloader</p>
+              <p className="mt-1 text-sm text-muted">
+                Download single videos or playlists.
+              </p>
+            </div>
+          </div>
         </header>
 
         <div className="grid gap-8 lg:grid-cols-3">
-          <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6 lg:col-span-2">
-            <div className="flex flex-wrap gap-3">
+          <section className="ui-card p-6 lg:col-span-2">
+            <div className="flex flex-wrap gap-2">
               {["video", "playlist"].map((value) => (
                 <label
                   key={value}
-                  className={`flex cursor-pointer items-center gap-3 rounded-xl border px-4 py-3 text-sm font-semibold transition ${
+                  className={`flex cursor-pointer items-center gap-3 rounded-lg border px-4 py-2.5 text-sm font-semibold transition ${
                     mode === value
-                      ? "border-cyan-400 bg-cyan-400/10 text-white"
-                      : "border-slate-800 bg-slate-900/50 text-slate-300 hover:border-slate-700"
+                      ? "border-primary bg-primary/10 text-foreground"
+                      : "border-border bg-card text-muted hover:bg-card-muted"
                   }`}
                 >
                   <input
@@ -147,7 +147,7 @@ export default function HomePage() {
                       setAnalyzeResult(null);
                       setSelectedVideos([]);
                     }}
-                    className="h-4 w-4 accent-cyan-400"
+                    className="h-4 w-4 accent-primary"
                   />
                   {value === "video" ? "Single video" : "Playlist"}
                 </label>
@@ -163,52 +163,38 @@ export default function HomePage() {
 
             <div className="mt-6 grid gap-6 md:grid-cols-2">
               <div>
-                <label className="text-sm text-slate-300">Format</label>
-                <div className="mt-2 rounded-lg border border-slate-800 bg-slate-900/70 px-4 py-2">
-                  <select
-                    value={selectedFormat}
-                    onChange={(event) =>
-                      setSelectedFormat(event.target.value as FormatType)
-                    }
-                    className="w-full bg-transparent text-white focus:outline-none"
-                  >
-                    {FORMAT_OPTIONS.map((option) => (
-                      <option
-                        key={option.value}
-                        value={option.value}
-                        className="bg-slate-900 text-white"
-                      >
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <label className="ui-label">Format</label>
+                <select
+                  value={selectedFormat}
+                  onChange={(event) =>
+                    setSelectedFormat(event.target.value as FormatType)
+                  }
+                  className="ui-select mt-2"
+                >
+                  {FORMAT_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div>
-                <label className="text-sm text-slate-300">Quality</label>
-                <div className="mt-2 rounded-lg border border-slate-800 bg-slate-900/70 px-4 py-2">
-                  <select
-                    value={selectedQuality}
-                    onChange={(event) =>
-                      setSelectedQuality(event.target.value as QualityType)
-                    }
-                    className="w-full bg-transparent text-white focus:outline-none"
-                  >
-                    {QUALITY_OPTIONS.map((option) => (
-                      <option
-                        key={option.value}
-                        value={option.value}
-                        className="bg-slate-900 text-white"
-                      >
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <p className="mt-1 text-xs text-slate-400">
-                  {selectedQualityLabel}
-                </p>
+                <label className="ui-label">Quality</label>
+                <select
+                  value={selectedQuality}
+                  onChange={(event) =>
+                    setSelectedQuality(event.target.value as QualityType)
+                  }
+                  className="ui-select mt-2"
+                >
+                  {QUALITY_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="ui-hint mt-1">{selectedQualityLabel}</p>
               </div>
             </div>
 
@@ -222,26 +208,43 @@ export default function HomePage() {
             )}
 
             {analyzeResult && (
-              <div className="mt-6 rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-                <p className="text-sm text-slate-400">Preview</p>
-                <h3 className="text-xl font-semibold text-white">
-                  {analyzeResult.title}
-                </h3>
+              <div className="mt-6 rounded-xl border border-border bg-card-muted p-4">
+                <p className="text-sm text-muted">Preview</p>
+                <div className="mt-2 flex items-start gap-4">
+                  {(analyzeResult.thumbnail || analyzeResult.items?.[0]?.thumbnail) && (
+                    <Image
+                      src={
+                        analyzeResult.thumbnail ||
+                        analyzeResult.items?.[0]?.thumbnail ||
+                        ""
+                      }
+                      alt={analyzeResult.title}
+                      width={160}
+                      height={90}
+                      className="h-[72px] w-[128px] shrink-0 rounded-lg object-cover"
+                    />
+                  )}
+                  <div className="min-w-0">
+                    <h3 className="text-lg font-semibold text-foreground">
+                      {analyzeResult.title}
+                    </h3>
                 {analyzeResult.duration && (
-                  <p className="text-sm text-slate-400">
+                  <p className="mt-1 text-sm text-muted">
                     Duration: {analyzeResult.duration}
                   </p>
                 )}
                 {analyzeResult.items && (
-                  <p className="text-sm text-slate-400">
+                  <p className="mt-1 text-sm text-muted">
                     Playlist items detected: {analyzeResult.items.length}
                   </p>
                 )}
+                  </div>
+                </div>
               </div>
             )}
 
             {submissionError && (
-              <p className="mt-4 text-sm text-red-400">{submissionError}</p>
+              <p className="mt-4 text-sm text-danger">{submissionError}</p>
             )}
 
             <div className="mt-6 flex flex-wrap gap-3">
@@ -249,17 +252,17 @@ export default function HomePage() {
                 type="button"
                 onClick={handleStartDownload}
                 disabled={submitting}
-                className="flex items-center gap-2 rounded-lg bg-linear-to-r from-cyan-400 to-blue-500 px-6 py-3 text-base font-semibold text-slate-950 shadow disabled:opacity-60"
+                className="ui-button"
               >
                 {submitting ? "Starting..." : "Start download"}
               </button>
             </div>
           </section>
 
-          <aside className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
+          <aside className="ui-card p-6">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-white">Active Jobs</h2>
-              <span className="text-xs text-slate-400">
+              <h2 className="text-lg font-semibold text-foreground">Jobs</h2>
+              <span className="text-xs text-muted">
                 Live progress & completion links
               </span>
             </div>
