@@ -140,6 +140,36 @@ export async function GET(
           return;
         }
 
+        const state = await job.getState();
+        if (state === "completed") {
+          const raw =
+            job.returnvalue && typeof job.returnvalue === "object"
+              ? (job.returnvalue as Record<string, unknown>)
+              : null;
+          const downloadUrl =
+            typeof raw?.downloadUrl === "string" ? raw.downloadUrl : null;
+          const files = Array.isArray(raw?.files) ? raw.files : null;
+          const folderPath =
+            typeof raw?.folderPath === "string" ? raw.folderPath : null;
+          sendEvent({
+            type: "complete",
+            url: downloadUrl,
+            files,
+            folderPath,
+          });
+          cleanup();
+          return;
+        }
+
+        if (state === "failed") {
+          sendEvent({
+            type: "error",
+            message: job.failedReason || "Job failed",
+          });
+          cleanup();
+          return;
+        }
+
         const initialProgress = normalizeProgress(job.progress);
         sendEvent({
           type: "progress",

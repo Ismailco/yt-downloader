@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import UrlInput from "@/components/UrlInput";
 import PlaylistSelector from "@/components/PlaylistSelector";
@@ -15,6 +15,8 @@ import {
   QualityType,
 } from "@/types";
 
+const JOBS_STORAGE_KEY = "yt-downloader:jobs";
+
 export default function HomePage() {
   const [mode, setMode] = useState<"video" | "playlist">("video");
   const [selectedFormat, setSelectedFormat] = useState<FormatType>("mp4");
@@ -27,6 +29,41 @@ export default function HomePage() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(JOBS_STORAGE_KEY);
+      if (!raw) {
+        return;
+      }
+      const parsed = JSON.parse(raw) as unknown;
+      if (!Array.isArray(parsed)) {
+        return;
+      }
+
+      const restored = parsed
+        .filter((item): item is { id: unknown; type: unknown } => !!item && typeof item === "object")
+        .map((item) => item as { id: unknown; type: unknown })
+        .filter(
+          (item): item is { id: string; type: "video" | "playlist" } =>
+            typeof item.id === "string" &&
+            (item.type === "video" || item.type === "playlist"),
+        )
+        .map((item) => ({ id: item.id, type: item.type }));
+
+      if (restored.length) {
+        setJobs(restored);
+      }
+    } catch {
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(JOBS_STORAGE_KEY, JSON.stringify(jobs));
+    } catch {
+    }
+  }, [jobs]);
 
   const playlistItems = useMemo((): PlaylistItem[] => {
     if (!analyzeResult || !Array.isArray(analyzeResult.items)) {
@@ -97,7 +134,13 @@ export default function HomePage() {
       }
 
       const result = await response.json();
-      setJobs((prev) => [...prev, { id: result.jobId, type: mode }]);
+      setJobs((prev) => {
+        const nextId = String(result.jobId);
+        if (prev.some((job) => String(job.id) === nextId)) {
+          return prev;
+        }
+        return [...prev, { id: nextId, type: mode }];
+      });
     } catch (error) {
       setSubmissionError(
         error instanceof Error ? error.message : "An error occurred",
