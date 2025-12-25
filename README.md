@@ -12,31 +12,32 @@ A modern, self-hosted YouTube video and playlist downloader with a beautiful web
 - **Job Queue** - BullMQ-powered background job processing with Redis
 - **Secure Downloads** - HMAC-signed download tokens with expiration
 - **Rate Limiting** - Built-in API rate limiting per IP
-- **API Key Protection** - Secure API endpoints with key authentication
 - **Docker Ready** - Full Docker Compose setup with Nginx reverse proxy
+- **CLI Included** - Optional local CLI (`bin/ytdown`) for direct downloads
 
 ## Tech Stack
 
 - **Frontend**: Next.js 16, React 19, TailwindCSS 4
 - **Backend**: Next.js App Router API Routes
 - **Queue**: BullMQ + Redis
-- **Download**: youtube-dl-exec, ytpl
+- **Download**: `yt-dlp` (system binary), ytpl
 - **Audio**: fluent-ffmpeg
 - **Language**: TypeScript
 
 ## Prerequisites
 
 - Node.js 20+
-- pnpm 9+
+- pnpm 10+
 - Redis 7+
 - FFmpeg (for MP3 conversion)
+- yt-dlp (for metadata + downloads when running outside Docker)
 
 ## Quick Start
 
 ### 1. Clone and Install
 
 ```bash
-git clone https://github.com/yourusername/yt-downloader.git
+git clone <REPO_URL>
 cd yt-downloader
 pnpm install
 ```
@@ -68,10 +69,18 @@ pnpm dev
 ### 5. Start the Worker (separate terminal)
 
 ```bash
-pnpm ts-node workers/downloadWorker.ts
+pnpm worker:dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) to use the app.
+
+## Development (Docker)
+
+Run the full stack (web + worker + redis) in Docker:
+
+```bash
+pnpm dev:docker
+```
 
 ## Project Structure
 
@@ -122,8 +131,8 @@ All API endpoints are accessible without an API key.
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `API_KEY` | (Removed) Previously used for API authentication | N/A |
 | `DOWNLOAD_TOKEN_SECRET` | Secret for signing download URLs | Required |
+| `DOWNLOAD_TOKEN_TTL_SECONDS` | Download token TTL (seconds) | `3600` |
 | `REDIS_URL` | Redis connection URL | `redis://localhost:6379` |
 | `REDIS_HOST` | Redis host (if not using URL) | `127.0.0.1` |
 | `REDIS_PORT` | Redis port (if not using URL) | `6379` |
@@ -131,7 +140,14 @@ All API endpoints are accessible without an API key.
 | `OUTPUT_BASE` | Base directory for downloads | `./` |
 | `CONCURRENCY` | Worker concurrency | `2` |
 | `STORAGE_TTL_HOURS` | Hours before cleanup | `24` |
-| `NEXT_PUBLIC_API_KEY` | (Removed) Previously used for frontend API authentication | N/A |
+| `WORKER_CONCURRENCY` | Alternative name for worker concurrency | `2` |
+| `DOWNLOAD_EVENTS_CHANNEL` | Redis pub/sub channel for worker events | `download:events` |
+| `JOB_ATTEMPTS` | BullMQ retry attempts | `3` |
+| `JOB_BACKOFF_TYPE` | BullMQ backoff strategy | `exponential` |
+| `JOB_BACKOFF_DELAY` | BullMQ backoff delay (ms) | `5000` |
+| `JOB_REMOVE_ON_COMPLETE_AGE` | Remove completed jobs after (seconds) | `3600` |
+| `YT_DLP_BIN` | Path to the `yt-dlp` binary | `/usr/local/bin/yt-dlp` |
+| `YT_DLP_MOCK_JSON` | Test-only: bypass `yt-dlp` and return this JSON | - |
 
 ## Docker Deployment
 
@@ -148,6 +164,8 @@ docker compose up -d
 docker compose logs -f
 ```
 
+Important: the development Docker images install `yt-dlp`, but the production `Dockerfile` / `Dockerfile.worker` currently only install FFmpeg. For production containers, you must install `yt-dlp` (or provide it via a derived image) and ensure `YT_DLP_BIN` points to it.
+
 ### Services
 
 - **web** - Next.js application (port 3000 internal)
@@ -159,16 +177,16 @@ docker compose logs -f
 
 ### Pre-deployment
 
-- [ ] (Removed) API key is no longer required
 - [ ] Generate secure `DOWNLOAD_TOKEN_SECRET` (min 32 characters)
 - [ ] Configure Redis (consider Redis Cloud for production)
+- [ ] Install/provide `yt-dlp` in your runtime environment and set `YT_DLP_BIN` if needed
 - [ ] Set up SSL certificates for HTTPS
 - [ ] Configure storage volume with adequate space
 - [ ] Set appropriate `CONCURRENCY` based on server resources
 
 ### Security
 
-- [ ] Use strong, unique API key
+- [ ] Use a strong, unique `DOWNLOAD_TOKEN_SECRET`
 - [ ] Enable HTTPS via nginx
 - [ ] Configure firewall (only expose ports 80/443)
 - [ ] Set `NODE_ENV=production`
@@ -189,11 +207,7 @@ docker compose logs -f
 - [ ] Test playlist download functionality
 - [ ] Verify SSE progress updates work
 - [ ] Test file download with token
-- [ ] Set up cleanup cron job:
-  ```bash
-  # Run cleanup every 6 hours
-  0 */6 * * * cd /app && pnpm ts-node scripts/cleanup.ts
-  ```
+- [ ] Optional: set up a cleanup job to remove old files (see `scripts/cleanup.ts`)
 - [ ] Monitor disk space usage
 - [ ] Set up alerting for failed jobs
 
@@ -228,14 +242,19 @@ server {
 ```bash
 # Development
 pnpm dev              # Start Next.js dev server
+pnpm worker:dev       # Start BullMQ worker
+pnpm dev:docker       # Run web + worker + redis via Docker Compose
+pnpm dev:docker:clean # Same as above, but removes volumes first
 pnpm build            # Build for production
 pnpm start            # Start production server
 pnpm lint             # Run ESLint
 pnpm test             # Run tests
 
 # Maintenance
-pnpm ts-node scripts/cleanup.ts   # Clean expired downloads
+pnpm exec ts-node scripts/cleanup.ts   # Clean expired downloads
 ```
+
+Note: `scripts/cleanup.ts` removes expired items from `./storage` and `./tmp` relative to the current working directory. Run it from the same directory used as `OUTPUT_BASE` (defaults to the project root).
 
 ## CLI Usage
 
@@ -243,17 +262,19 @@ A standalone CLI is also available:
 
 ```bash
 # Download a video
-./bin/ytdown https://youtube.com/watch?v=VIDEO_ID
+./bin/ytdown -v https://youtube.com/watch?v=VIDEO_ID
 
 # Download a playlist
-./bin/ytdown https://youtube.com/playlist?list=PLAYLIST_ID
+./bin/ytdown -p https://youtube.com/playlist?list=PLAYLIST_ID
 ```
+
+The CLI writes downloads to `~/Movies/Youtube_Downloader`.
 
 ## Troubleshooting
 
 ### Downloads fail immediately
 - Ensure FFmpeg is installed: `ffmpeg -version`
-- Check youtube-dl-exec is working: `npx youtube-dl --version`
+- Ensure `yt-dlp` is available: `yt-dlp --version` (or confirm `YT_DLP_BIN` points to a valid binary)
 - Verify Redis is running: `redis-cli ping`
 
 ### SSE not working
