@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, ChangeEvent } from "react";
+import { useCallback, useEffect, useRef, useState, ChangeEvent } from "react";
 import { UrlInputProps, AnalyzeResult } from "@/types";
 
 export default function UrlInput({
@@ -13,6 +13,10 @@ export default function UrlInput({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const debounceRef = useRef<number | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const lastAnalyzedKeyRef = useRef<string | null>(null);
+
   const handleInputChange = (event: ChangeEvent<HTMLInputElement>) => {
     const nextUrl = event.target.value;
     setUrl(nextUrl);
@@ -20,61 +24,102 @@ export default function UrlInput({
     onUrlChange?.(nextUrl);
   };
 
-  const handleAnalyze = async () => {
-    if (!url || !/^https?:\/\//i.test(url)) {
-      setError("Please enter a valid URL (https://...)");
+  const analyzeUrl = useCallback(
+    async (candidateUrl: string) => {
+      const normalizedUrl = candidateUrl.trim();
+      if (!normalizedUrl) {
+        return;
+      }
+
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
+
+      setLoading(true);
+      setError(null);
+
+      try {
+        const response = await fetch("/api/analyze", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ url: normalizedUrl, type }),
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          const payload = await response.json().catch(() => ({}));
+          throw new Error(payload.error || "Unable to analyze URL");
+        }
+
+        const data: AnalyzeResult = await response.json();
+        lastAnalyzedKeyRef.current = `${type}:${normalizedUrl}`;
+        onAnalyzeComplete?.({ url: normalizedUrl, data });
+      } catch (err) {
+        if (controller.signal.aborted) {
+          return;
+        }
+        setError(err instanceof Error ? err.message : "An error occurred");
+      } finally {
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
+      }
+    },
+    [onAnalyzeComplete, type],
+  );
+
+  useEffect(() => {
+    const trimmedUrl = url.trim();
+
+    if (!trimmedUrl) {
+      setLoading(false);
+      setError(null);
       return;
     }
 
-    setLoading(true);
-    setError(null);
-
-    try {
-      const response = await fetch("/api/analyze", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ url, type }),
-      });
-
-      if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
-        throw new Error(payload.error || "Unable to analyze URL");
-      }
-
-      const data: AnalyzeResult = await response.json();
-      onAnalyzeComplete?.({ url, data });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "An error occurred");
-    } finally {
-      setLoading(false);
+    if (!/^https?:\/\//i.test(trimmedUrl)) {
+      return;
     }
-  };
+
+    const analyzeKey = `${type}:${trimmedUrl}`;
+    if (analyzeKey === lastAnalyzedKeyRef.current) {
+      return;
+    }
+
+    if (debounceRef.current) {
+      window.clearTimeout(debounceRef.current);
+    }
+
+    debounceRef.current = window.setTimeout(() => {
+      void analyzeUrl(trimmedUrl);
+    }, 450);
+
+    return () => {
+      if (debounceRef.current) {
+        window.clearTimeout(debounceRef.current);
+      }
+    };
+  }, [analyzeUrl, type, url]);
 
   return (
     <div className={`space-y-2 ${className}`}>
-      <label className="block text-sm font-medium text-slate-300">
+      <label className="ui-label" htmlFor="yt-url">
         YouTube URL
       </label>
-      <div className="flex flex-col gap-2 md:flex-row">
+      <div>
         <input
+          id="yt-url"
           type="text"
           value={url}
           onChange={handleInputChange}
           placeholder="https://www.youtube.com/watch?v=..."
-          className="flex-1 rounded-md border border-slate-700 bg-slate-900/70 px-4 py-2 text-white focus:border-cyan-400 focus:outline-none"
+          className="ui-input"
         />
-        <button
-          type="button"
-          onClick={handleAnalyze}
-          disabled={loading}
-          className="rounded-md bg-cyan-500 px-4 py-2 font-semibold text-slate-900 shadow disabled:opacity-60"
-        >
-          {loading ? "Analyzing..." : "Analyze"}
-        </button>
       </div>
-      {error && <p className="text-sm text-red-400">{error}</p>}
+      {loading && !error && <p className="ui-hint">Analyzing…</p>}
+      {error && <p className="text-sm text-danger">{error}</p>}
     </div>
   );
 }

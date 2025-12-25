@@ -102,9 +102,10 @@ function buildFileMeta(jobId: string, files: string[]) {
 }
 
 async function processVideoJob(job: Job, tempDir: string) {
+  const requestedQuality = job.data.quality || "best";
   const downloadOptions = {
-    format: job.data.format || "mp4",
-    quality: job.data.quality || "best",
+    format: requestedQuality === "audio" ? "mp3" : job.data.format || "mp4",
+    quality: requestedQuality,
   };
   const result = await downloadVideo(
     job.data.url,
@@ -126,6 +127,10 @@ async function processVideoJob(job: Job, tempDir: string) {
 
 async function processPlaylistJob(job: Job, tempDir: string) {
   const { options = {} } = job.data;
+  const normalizedOptions = {
+    ...options,
+    format: options.quality === "audio" ? "mp3" : options.format,
+  };
   const result = await downloadPlaylist(
     job.data.url,
     tempDir,
@@ -137,7 +142,7 @@ async function processPlaylistJob(job: Job, tempDir: string) {
         videoId: progress.videoId,
         message: progress.message,
       }),
-    options,
+    normalizedOptions,
   );
   const movedFiles = await finalizeFiles(job.id!, result.files);
   await trackProgress(job, {

@@ -56,6 +56,28 @@ const VIDEO_FORMAT = "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best";
 const AUDIO_FORMAT = "bestaudio[ext=m4a]/bestaudio/best";
 const noop: ProgressCallback = () => {};
 
+function resolveFormatSelector(options: DownloadOptions, targetFormat: "mp3" | "mp4"): string {
+  const quality = options.quality || "best";
+
+  if (targetFormat === "mp3") {
+    return AUDIO_FORMAT;
+  }
+
+  if (quality === "audio") {
+    return AUDIO_FORMAT;
+  }
+
+  if (quality === "1080p") {
+    return "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/best[height<=1080]";
+  }
+
+  if (quality === "720p") {
+    return "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best[height<=720]";
+  }
+
+  return VIDEO_FORMAT;
+}
+
 /**
  * Ensures a directory exists and throws a descriptive error if it cannot be created.
  * @param {string} targetDir
@@ -233,7 +255,7 @@ async function downloadVideo(
 
   const resolvedDir = path.resolve(outputDir);
   const targetFormat = options.format === "mp3" ? "mp3" : "mp4";
-  const formatSelector = targetFormat === "mp3" ? AUDIO_FORMAT : VIDEO_FORMAT;
+  const formatSelector = resolveFormatSelector(options, targetFormat);
   await ensureDirectory(resolvedDir);
 
   let started = false;
@@ -292,7 +314,7 @@ async function downloadPlaylist(
   };
 
   const targetFormat = options.format === "mp3" ? "mp3" : "mp4";
-  const formatSelector = targetFormat === "mp3" ? AUDIO_FORMAT : VIDEO_FORMAT;
+  const formatSelector = resolveFormatSelector(options, targetFormat);
 
   const selectedIds =
     Array.isArray(options.selectedVideoIds) && options.selectedVideoIds.length
